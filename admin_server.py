@@ -149,6 +149,34 @@ def api_delete_ip_authorization(auth_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
+@app.route('/api/test-proxy', methods=['POST'])
+def api_test_proxy():
+    token = request.args.get('token')
+    user = get_user_by_token(token)
+    if not user:
+        abort(401, description='Invalid token')
+    data = request.get_json() or {}
+    address = data.get('proxy_address')
+    port = data.get('port')
+    username = data.get('username')
+    password = data.get('password')
+    if not address or not port:
+        return jsonify({'online': False, 'error': 'proxy_address and port required'}), 400
+    if username:
+        proxy_url = f'http://{username}:{password}@{address}:{port}'
+    else:
+        proxy_url = f'http://{address}:{port}'
+    proxies = {'http': proxy_url, 'https': proxy_url}
+    start = time.time()
+    try:
+        r = requests.get('https://api.ipify.org?format=json', proxies=proxies, timeout=20)
+        elapsed = round((time.time() - start) * 1000, 2)
+        r.raise_for_status()
+        external_ip = r.json().get('ip')
+        return jsonify({'online': True, 'latency_ms': elapsed, 'external_ip': external_ip})
+    except Exception as e:
+        return jsonify({'online': False, 'error': str(e)})
+
 @app.route('/api/usage')
 def api_usage():
     token = request.args.get('token')

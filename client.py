@@ -149,6 +149,16 @@ def view_proxies(cfg, ptype):
                 except Exception as ce:
                     print(f'\nClipboard copy failed: {ce}')
                     print('Copy the details above manually.')
+                test = input('\nTest this proxy against a neutral site? [y/N]: ').strip().lower()
+                if test == 'y':
+                    print('Testing proxy...')
+                    res, terr = api_post(cfg, '/api/test-proxy', p)
+                    if terr:
+                        print('Test error:', terr)
+                    elif res.get('online'):
+                        print(f"Proxy is online. Latency: {res.get('latency_ms')} ms. External IP: {res.get('external_ip')}")
+                    else:
+                        print(f"Proxy test failed: {res.get('error')}")
             except Exception as e:
                 print('Error:', e)
     input('Press Enter to go back')
