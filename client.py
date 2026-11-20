@@ -10,7 +10,7 @@ def load_client_cfg():
         try:
             with open(CONFIG_PATH, 'r') as f:
                 return json.load(f)
-        except:
+        except Exception:
             return {}
     return {}
 
@@ -26,108 +26,222 @@ def prompt_setup():
     save_client_cfg(cfg)
     return cfg
 
-def api_get(cfg, path):
+def api_get(cfg, path, params=None):
     url = f"{cfg['server_url']}{path}"
-    params = {'token': cfg['token']}
+    p = {'token': cfg['token']}
+    if params:
+        p.update(params)
     try:
-        r = requests.get(url, params=params, timeout=10)
+        r = requests.get(url, params=p, timeout=10)
         r.raise_for_status()
         return r.json(), None
     except requests.exceptions.ConnectionError as e:
         return None, f'Connection refused - check server URL and port. {e}'
-    except requests.exceptions.HTTPError as e:
-        return None, f'HTTP error {r.status_code}: {r.text[:200]}'
+    except requests.exceptions.HTTPError:
+        return None, f'HTTP {r.status_code}: {r.text[:200]}'
     except Exception as e:
         return None, f'Error: {e}'
 
-def print_header(title):
-    print('\n' + '='*50)
-    print(f' {title}')
-    print('='*50)
+def api_post(cfg, path, data):
+    url = f"{cfg['server_url']}{path}?token={cfg['token']}"
+    try:
+        r = requests.post(url, json=data, timeout=10)
+        r.raise_for_status()
+        return r.json(), None
+    except requests.exceptions.ConnectionError as e:
+        return None, f'Connection refused - check server URL and port. {e}'
+    except requests.exceptions.HTTPError:
+        return None, f'HTTP {r.status_code}: {r.text[:200]}'
+    except Exception as e:
+        return None, f'Error: {e}'
 
-def menu_main(cfg):
+def api_delete(cfg, path):
+    url = f"{cfg['server_url']}{path}?token={cfg['token']}"
+    try:
+        r = requests.delete(url, timeout=10)
+        r.raise_for_status()
+        return r.json(), None
+    except requests.exceptions.ConnectionError as e:
+        return None, f'Connection refused - check server URL and port. {e}'
+    except requests.exceptions.HTTPError:
+        return None, f'HTTP {r.status_code}: {r.text[:200]}'
+    except Exception as e:
+        return None, f'Error: {e}'
+
+def header(title):
+    print('\n' + '='*60)
+    print(f' {title}')
+    print('='*60)
+
+def main_menu(cfg):
     while True:
-        print_header('Proxy Client')
-        print('1. View Proxies')
-        print('2. View Usage')
-        print('3. Copy Proxy to Clipboard')
-        print('4. Change Auth Details')
-        print('5. Exit')
-        choice = input('Select [1-5]: ').strip()
+        header('Proxy Client')
+        print('1. Proxies')
+        print('2. Usage')
+        print('3. Proxy Auth')
+        print('4. IP Authorization')
+        print('5. Change Admin Auth')
+        print('6. Exit')
+        choice = input('Select [1-6]: ').strip()
         if choice == '1':
-            menu_proxies(cfg)
+            proxies_menu(cfg)
         elif choice == '2':
-            menu_usage(cfg)
+            usage_page(cfg)
         elif choice == '3':
-            menu_copy(cfg)
+            proxy_auth_menu(cfg)
         elif choice == '4':
-            change_auth(cfg)
+            ip_auth_menu(cfg)
         elif choice == '5':
+            change_admin_auth(cfg)
+        elif choice == '6':
             print('Bye')
             break
         else:
             print('Invalid choice')
 
-def menu_proxies(cfg):
-    data, err = api_get(cfg, '/api/proxies')
+def proxies_menu(cfg):
+    while True:
+        header('Proxies')
+        print('1. Static Residential')
+        print('2. Dedicated ISP')
+        print('3. Back')
+        choice = input('Select [1-3]: ').strip()
+        if choice == '1':
+            view_proxies(cfg, 'static_residential')
+        elif choice == '2':
+            view_proxies(cfg, 'dedicated_isp')
+        elif choice == '3':
+            return
+        else:
+            print('Invalid choice')
+
+def view_proxies(cfg, ptype):
+    data, err = api_get(cfg, '/api/proxies', {'type': ptype})
     if err:
         print('Error:', err)
         input('Press Enter to go back')
         return
     proxies = data.get('proxies', [])
-    mode = data.get('mode')
-    print_header(f'Proxies - Mode: {mode}')
+    print(header(f"{data.get('proxy_type', ptype)}"))
     for i, p in enumerate(proxies, 1):
-        print(f"{i}. [{p.get('proxy_type_label')}] {p.get('country_code')} {p.get('city_name')} - {p.get('proxy_address')}:{p.get('port')}  ASN:{p.get('asn_number')}")
+        print(f"{i}. {p.get('country_code')} {p.get('city_name')}  {p.get('proxy_address')}:{p.get('port')}  ASN {p.get('asn_number')}")
+    if data.get('purchase_required'):
+        print('\nDedicated ISP proxies are available for purchase.')
     note = data.get('note')
     if note:
-        print(f"\nNote: {note}")
-    input('\nPress Enter to go back')
+        print(f"\n{note}")
+    if proxies:
+        c = input('\nEnter number to copy proxy credentials, or Enter to go back: ').strip()
+        if c:
+            try:
+                idx = int(c) - 1
+                p = proxies[idx]
+                text = f"{p.get('proxy_address')}:{p.get('port')}  user {p.get('username')} pass {p.get('password')}"
+                pyperclip.copy(text)
+                print('Copied:', text)
+            except Exception as e:
+                print('Error:', e)
+    input('Press Enter to go back')
 
-def menu_usage(cfg):
+def usage_page(cfg):
     data, err = api_get(cfg, '/api/usage')
     if err:
         print('Error:', err)
         input('Press Enter to go back')
         return
-    print_header('Usage')
-    print(f"Mode: {data.get('mode')}  Multiplier: {data.get('multiplier')}")
-    print(f"Proxy Type: {data.get('proxy_type')}")
-    print(f"Bandwidth base: {data.get('bandwidth_base_gb')} GB")
-    print(f"Bandwidth reported to user: {data.get('bandwidth_reported_gb')} GB")
+    header('Usage')
+    print(f"Total bandwidth: {data.get('total_gb')} GB")
+    print(f"Used bandwidth: {data.get('used_gb')} GB")
+    print(f"Remaining bandwidth: {data.get('remaining_gb')} GB")
     print(f"Requests total: {data.get('requests_total')}")
     print(f"Requests successful: {data.get('requests_successful')}")
-    if data.get('isp_option_available'):
-        print("\nDedicated ISP proxies are available for purchase.")
+    last = data.get('last_request_sent_at')
+    if last:
+        print(f"Last request: {last}")
+    else:
+        print("No usage recorded yet.")
     input('\nPress Enter to go back')
 
-def menu_copy(cfg):
-    # fetch proxies to get details
-    data, err = api_get(cfg, '/api/proxies')
-    if err:
-        print('Error:', err)
-        input('Press Enter to go back')
-        return
-    proxies = data.get('proxies', [])
-    if not proxies:
-        print('No proxies available')
-        input('Press Enter to go back')
-        return
-    print_header('Copy Proxy')
-    for i, p in enumerate(proxies, 1):
-        print(f"{i}. {p.get('proxy_type_label')} {p.get('country_code')} {p.get('city_name')}")
-    try:
-        idx = int(input('Enter number to copy details: ')) - 1
-        p = proxies[idx]
-        text = f"{p.get('proxy_address')}:{p.get('port')}  user {p.get('username')} pass {p.get('password')}"
-        pyperclip.copy(text)
-        print('Copied to clipboard:', text)
-    except Exception as e:
-        print('Error:', e)
-    input('Press Enter to go back')
+def proxy_auth_menu(cfg):
+    while True:
+        header('Proxy Auth')
+        print('1. View credentials')
+        print('2. Edit credentials')
+        print('3. Back')
+        choice = input('Select [1-3]: ').strip()
+        if choice == '1':
+            data, err = api_get(cfg, '/api/proxy-auth')
+            if err:
+                print('Error:', err)
+            else:
+                print(f"Username: {data.get('username')}")
+                print(f"Password: {data.get('password')}")
+            input('Press Enter to go back')
+        elif choice == '2':
+            data, err = api_get(cfg, '/api/proxy-auth')
+            if err:
+                print('Error:', err)
+                input('Press Enter to go back')
+                continue
+            print(f"Current username: {data.get('username')}")
+            new_user = input('New username (Enter to keep): ').strip() or data.get('username')
+            print(f"Current password: {data.get('password')}")
+            new_pass = input('New password (Enter to keep): ').strip() or data.get('password')
+            res, err = api_post(cfg, '/api/proxy-auth', {'username': new_user, 'password': new_pass})
+            if err:
+                print('Error:', err)
+            else:
+                print('Credentials updated.')
+            input('Press Enter to go back')
+        elif choice == '3':
+            return
+        else:
+            print('Invalid choice')
 
-def change_auth(cfg):
-    print_header('Change Auth Details')
+def ip_auth_menu(cfg):
+    while True:
+        header('IP Authorization')
+        print('1. List authorized IPs')
+        print('2. Add IP')
+        print('3. Remove IP')
+        print('4. Back')
+        choice = input('Select [1-4]: ').strip()
+        if choice == '1':
+            data, err = api_get(cfg, '/api/ip-authorizations')
+            if err:
+                print('Error:', err)
+            else:
+                results = data.get('results', [])
+                if not results:
+                    print('No IPs authorized.')
+                for item in results:
+                    print(f"ID {item.get('id')}: {item.get('ip_address')}  last used {item.get('last_used_at')}")
+            input('Press Enter to go back')
+        elif choice == '2':
+            ip = input('IP address to authorize: ').strip()
+            if ip:
+                res, err = api_post(cfg, '/api/ip-authorizations', {'ip_address': ip})
+                if err:
+                    print('Error:', err)
+                else:
+                    print('IP authorized.')
+            input('Press Enter to go back')
+        elif choice == '3':
+            auth_id = input('Authorization ID to remove: ').strip()
+            if auth_id:
+                res, err = api_delete(cfg, f'/api/ip-authorizations/{auth_id}')
+                if err:
+                    print('Error:', err)
+                else:
+                    print('Removed.')
+            input('Press Enter to go back')
+        elif choice == '4':
+            return
+        else:
+            print('Invalid choice')
+
+def change_admin_auth(cfg):
+    header('Change Admin Auth')
     server = input(f'Server URL [{cfg["server_url"]}]: ').strip() or cfg['server_url']
     token = input(f'Token [{cfg["token"][:6]}...]: ').strip() or cfg['token']
     cfg['server_url'] = server.rstrip('/')
@@ -141,6 +255,6 @@ if __name__ == '__main__':
     if not cfg or 'server_url' not in cfg or 'token' not in cfg:
         cfg = prompt_setup()
     try:
-        menu_main(cfg)
+        main_menu(cfg)
     except KeyboardInterrupt:
         print('\nExiting')

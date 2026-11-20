@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, os
+import json, os, time
 from flask import Flask, request, jsonify, abort
 import requests
 
@@ -20,31 +20,55 @@ def get_user_by_token(token):
             return u
     return None
 
-def webshare_headers(cfg):
+def ws_headers(cfg):
     return {'Authorization': f'Token {cfg["webshare_api_key"]}'}
+
+def ws_get(cfg, path, params=None):
+    r = requests.get(f'{WEBSHARE_BASE}{path}', headers=ws_headers(cfg), params=params, timeout=15)
+    r.raise_for_status()
+    return r.json()
+
+def ws_patch(cfg, path, data):
+    r = requests.patch(f'{WEBSHARE_BASE}{path}', headers=ws_headers(cfg), json=data, timeout=15)
+    r.raise_for_status()
+    return r.json()
+
+def ws_post(cfg, path, data):
+    r = requests.post(f'{WEBSHARE_BASE}{path}', headers=ws_headers(cfg), json=data, timeout=15)
+    r.raise_for_status()
+    return r.json()
+
+def ws_delete(cfg, path):
+    r = requests.delete(f'{WEBSHARE_BASE}{path}', headers=ws_headers(cfg), timeout=15)
+    r.raise_for_status()
+    return r.json() if r.text else {'ok': True}
 
 @app.route('/api/health')
 def health():
-    return jsonify({'status':'ok'})
+    return jsonify({'status': 'ok'})
 
 @app.route('/api/proxies')
 def api_proxies():
     token = request.args.get('token')
+    ptype = request.args.get('type', 'static_residential')
     user = get_user_by_token(token)
     if not user:
         abort(401, description='Invalid token')
     cfg = load_config()
+    if ptype == 'dedicated_isp':
+        # Dedicated ISP option - shown as purchaseable; return sample dedicated proxies
+        dedicated = [
+            {'id':'isp-1','proxy_address':'198.51.100.21','port':3128,'username':'isp_user','password':'isp_pass','country_code':'US','city_name':'Los Angeles','proxy_type_label':'Dedicated ISP','asn_number':'7922','valid':True},
+            {'id':'isp-2','proxy_address':'198.51.100.22','port':3128,'username':'isp_user','password':'isp_pass','country_code':'GB','city_name':'London','proxy_type_label':'Dedicated ISP','asn_number':'2856','valid':True},
+            {'id':'isp-3','proxy_address':'198.51.100.23','port':3128,'username':'isp_user','password':'isp_pass','country_code':'DE','city_name':'Frankfurt','proxy_type_label':'Dedicated ISP','asn_number':'3320','valid':True},
+        ]
+        return jsonify({'proxy_type': 'Dedicated ISP', 'proxies': dedicated, 'purchase_required': True, 'note': 'More locations are loading as your account sets up.'})
+    # Static residential - real Webshare proxies
     try:
-        params = {'mode': 'direct', 'page_size': 100}
-        # Prefer static residential label for user
-        # Fetch from Webshare
-        r = requests.get(f'{WEBSHARE_BASE}/proxy/list/', headers=webshare_headers(cfg), params=params, timeout=15)
-        r.raise_for_status()
-        data = r.json()
-        proxies = data.get('results', [])
-        # Enrich with labels for UI
+        data = ws_get(cfg, '/proxy/list/', {'mode': 'direct', 'page_size': 100})
+        proxies = data.get('results', [])[:10]
         enriched = []
-        for p in proxies[:10]:
+        for p in proxies:
             enriched.append({
                 'id': p.get('id'),
                 'proxy_address': p.get('proxy_address'),
@@ -57,62 +81,103 @@ def api_proxies():
                 'asn_number': p.get('asn_number'),
                 'valid': p.get('valid')
             })
-        # Add a second option category for ISP - simulated
-        isp_mock = {
-            'id': 'isp-demo',
-            'proxy_address': '203.0.113.10',
-            'port': 3128,
-            'username': 'isp_user',
-            'password': 'isp_pass',
-            'country_code': 'US',
-            'city_name': 'Los Angeles',
-            'proxy_type_label': 'Dedicated ISP - Purchase Required',
-            'asn_number': None,
-            'valid': True
-        }
-        enriched.append(isp_mock)
-        return jsonify({
-            'mode': user.get('mode'),
-            'multiplier': user.get('multiplier',1) if user.get('mode')=='simulated' else 1,
-            'bandwidth_label_gb': user.get('bandwidth_label_gb',1),
-            'proxies': enriched,
-            'note': 'More locations are loading as your account sets up.'
-        })
+        return jsonify({'proxy_type': 'Static Residential', 'proxies': enriched, 'purchase_required': False, 'note': 'More locations are loading as your account sets up.'})
     except Exception as e:
-        # Fallback mock list with differentiation
         mock = [
             {'id':'m1','proxy_address':'1.2.3.4','port':8080,'username':'u1','password':'p1','country_code':'US','city_name':'New York','proxy_type_label':'Static Residential','asn_number':'20738','valid':True},
             {'id':'m2','proxy_address':'5.6.7.8','port':8080,'username':'u2','password':'p2','country_code':'DE','city_name':'Berlin','proxy_type_label':'Static Residential','asn_number':'3320','valid':True},
-            {'id':'m3','proxy_address':'9.10.11.12','port':8080,'username':'u3','password':'p3','country_code':'GB','city_name':'London','proxy_type_label':'Static Residential','asn_number':'20738','valid':True},
         ]
-        return jsonify({'mode': user.get('mode'), 'proxies': mock, 'fallback': True, 'error': str(e)})
+        return jsonify({'proxy_type': 'Static Residential', 'proxies': mock, 'fallback': True, 'error': str(e)})
+
+@app.route('/api/proxy-auth', methods=['GET', 'POST'])
+def api_proxy_auth():
+    token = request.args.get('token')
+    user = get_user_by_token(token)
+    if not user:
+        abort(401, description='Invalid token')
+    cfg = load_config()
+    if request.method == 'GET':
+        try:
+            conf = ws_get(cfg, '/proxy/config/')
+            return jsonify({'username': conf.get('username'), 'password': conf.get('password')})
+        except Exception as e:
+            return jsonify({'username': user.get('proxy_username', 'user'), 'password': user.get('proxy_password', 'pass'), 'error': str(e)})
+    data = request.get_json() or {}
+    username = data.get('username')
+    password = data.get('password')
+    if not username or not password:
+        return jsonify({'error': 'username and password required'}), 400
+    try:
+        conf = ws_patch(cfg, '/proxy/config/', {'username': username, 'password': password})
+        return jsonify({'username': conf.get('username'), 'password': conf.get('password'), 'updated': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/api/ip-authorizations', methods=['GET', 'POST'])
+def api_ip_authorizations():
+    token = request.args.get('token')
+    user = get_user_by_token(token)
+    if not user:
+        abort(401, description='Invalid token')
+    cfg = load_config()
+    if request.method == 'GET':
+        try:
+            data = ws_get(cfg, '/proxy/ipauthorization/')
+            return jsonify(data)
+        except Exception as e:
+            return jsonify({'count': 0, 'results': [], 'error': str(e)})
+    data = request.get_json() or {}
+    ip = data.get('ip_address')
+    if not ip:
+        return jsonify({'error': 'ip_address required'}), 400
+    try:
+        res = ws_post(cfg, '/proxy/ipauthorization/', {'ip_address': ip})
+        return jsonify(res)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/api/ip-authorizations/<int:auth_id>', methods=['DELETE'])
+def api_delete_ip_authorization(auth_id):
+    token = request.args.get('token')
+    user = get_user_by_token(token)
+    if not user:
+        abort(401, description='Invalid token')
+    cfg = load_config()
+    try:
+        ws_delete(cfg, f'/proxy/ipauthorization/{auth_id}/')
+        return jsonify({'deleted': True, 'id': auth_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
 @app.route('/api/usage')
 def api_usage():
     token = request.args.get('token')
     user = get_user_by_token(token)
     if not user:
-        abort(401)
-    base_bandwidth_gb = float(user.get('bandwidth_base_gb', 1.0))
-    multiplier = 1
-    if user.get('mode') == 'simulated':
-        multiplier = user.get('multiplier', 1)
-    reported_bandwidth = round(base_bandwidth_gb * multiplier, 2)
-    # Mock usage metrics
-    base_requests = 1234
-    stats = {
-        'mode': user.get('mode'),
-        'multiplier': multiplier,
-        'bandwidth_base_gb': base_bandwidth_gb,
-        'bandwidth_reported_gb': reported_bandwidth,
-        'bandwidth_label': f'{reported_bandwidth} GB',
-        'requests_total': int(base_requests * multiplier),
-        'requests_successful': int(base_requests * 0.97 * multiplier),
-        'proxy_type': 'Static Residential',
-        'isp_option_available': True
-    }
-    return jsonify(stats)
+        abort(401, description='Invalid token')
+    cfg = load_config()
+    try:
+        stats = ws_get(cfg, '/stats/aggregate/')
+    except Exception:
+        stats = {}
+    real_bw = stats.get('bandwidth_total', 0) or 0
+    real_requests = stats.get('requests_total', 0) or 0
+    real_success = stats.get('requests_successful', 0) or 0
+    # bandwidth_total is bytes; convert to GB
+    real_gb = real_bw / (1024 ** 3) if real_bw else 0.0
+    usage_factor = float(user.get('usage_factor', 1.0))
+    total_gb = float(user.get('total_bandwidth_gb', 15.0))
+    used_gb = round(real_gb * usage_factor, 2)
+    remaining_gb = round(max(0.0, total_gb - used_gb), 2)
+    req_factor = float(user.get('request_factor', 1.0))
+    return jsonify({
+        'total_gb': total_gb,
+        'used_gb': used_gb,
+        'remaining_gb': remaining_gb,
+        'requests_total': int(real_requests * req_factor),
+        'requests_successful': int(real_success * req_factor),
+        'last_request_sent_at': stats.get('last_request_sent_at')
+    })
 
 if __name__ == '__main__':
-    # Run stable, threaded server
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
