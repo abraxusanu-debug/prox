@@ -2,9 +2,9 @@
 
 ## Admin Server
 
-`admin_server.py` runs a Flask API on `http://0.0.0.0:5000`.
+`admin_server.py` runs a Flask API internally on `http://127.0.0.1:5000`. It is exposed publicly on **port 80** via nginx at `http://<host>/api/...`.
 
-Endpoints:
+Endpoints (accessed via nginx on port 80):
 
 - `GET /api/proxies?token=...&type=static_residential|dedicated_isp`
   Returns the proxy list for the selected proxy type.

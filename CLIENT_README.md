@@ -38,7 +38,7 @@ python client.py
 
 The first run asks for:
 
-- **Admin server URL** – e.g. `http://65.98.5.206:5000`
+- **Admin server URL** – e.g. `http://65.98.5.206`
 - **User token** – provided by the admin
 
 These are saved to `~/.prox_client_config.json` so you only enter them once.
@@ -107,7 +107,7 @@ Example:
 
 ```json
 {
-  "server_url": "http://65.98.5.206:5000",
+  "server_url": "http://65.98.5.206",
   "token": "your-user-token"
 }
 ```
@@ -115,9 +115,8 @@ Example:
 ## Troubleshooting
 
 **Connection refused**
-- Check the admin server URL and port.
-- Make sure the server is running and reachable.
-- The default port is `5000`.
+- Check the admin server URL.
+- Make sure the server is running and reachable on port 80.
 
 **Invalid token**
 - Use the token provided by the admin.
