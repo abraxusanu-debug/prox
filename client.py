@@ -131,14 +131,24 @@ def view_proxies(cfg, ptype):
     if note:
         print(f"\n{note}")
     if proxies:
-        c = input('\nEnter number to copy proxy credentials, or Enter to go back: ').strip()
+        c = input('\nEnter number to view/copy proxy credentials, or Enter to go back: ').strip()
         if c:
             try:
                 idx = int(c) - 1
                 p = proxies[idx]
-                text = f"{p.get('proxy_address')}:{p.get('port')}  user {p.get('username')} pass {p.get('password')}"
-                pyperclip.copy(text)
-                print('Copied:', text)
+                print('\nProxy details:')
+                print(f"  IP:       {p.get('proxy_address')}")
+                print(f"  Port:     {p.get('port')}")
+                print(f"  Username: {p.get('username')}")
+                print(f"  Password: {p.get('password')}")
+                print(f"  Format:   {p.get('username')}:{p.get('password')}@{p.get('proxy_address')}:{p.get('port')}")
+                text = f"{p.get('username')}:{p.get('password')}@{p.get('proxy_address')}:{p.get('port')}"
+                try:
+                    pyperclip.copy(text)
+                    print('\nCopied to clipboard.')
+                except Exception as ce:
+                    print(f'\nClipboard copy failed: {ce}')
+                    print('Copy the details above manually.')
             except Exception as e:
                 print('Error:', e)
     input('Press Enter to go back')
