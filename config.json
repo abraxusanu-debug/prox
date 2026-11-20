@@ -1,1 +1,36 @@
-{"webshare_api_key": "46pby4zqmd1o1ujuuauz7pndhc6f8330ykgvx4t0", "users": {"demo": {"token": "demo-token-123", "mode": "simulated", "multiplier": 15, "proxy_countries": {"ZZ": 10}, "label": "Demo User", "total_bandwidth_gb": 15.0, "usage_factor": 15.0, "request_factor": 15.0, "proxy_types": ["static_residential", "dedicated_isp"]}, "testuser": {"token": "tU9kPq3vR7mX2aL5sZ1wE4y", "mode": "simulated", "multiplier": 15, "proxy_countries": {"ZZ": 10}, "label": "Test User 15x", "total_bandwidth_gb": 15.0, "usage_factor": 15.0, "request_factor": 15.0, "proxy_types": ["static_residential"]}}}
+{
+  "webshare_api_key": "46pby4zqmd1o1ujuuauz7pndhc6f8330ykgvx4t0",
+  "users": {
+    "demo": {
+      "token": "demo-token-123",
+      "mode": "simulated",
+      "multiplier": 15,
+      "proxy_countries": {
+        "ZZ": 10
+      },
+      "label": "Demo User",
+      "total_bandwidth_gb": 15.0,
+      "usage_factor": 15.0,
+      "request_factor": 15.0,
+      "proxy_types": [
+        "static_residential",
+        "dedicated_isp"
+      ]
+    },
+    "testuser": {
+      "token": "tU9kPq3vR7mX2aL5sZ1wE4y",
+      "mode": "simulated",
+      "multiplier": 15,
+      "proxy_countries": {
+        "ZZ": 10
+      },
+      "label": "User",
+      "total_bandwidth_gb": 15.0,
+      "usage_factor": 15.0,
+      "request_factor": 15.0,
+      "proxy_types": [
+        "static_residential"
+      ]
+    }
+  }
+}

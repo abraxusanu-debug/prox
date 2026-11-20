@@ -116,6 +116,8 @@ def proxies_menu(cfg):
             options.append(ptype)
         back_num = len(options) + 1
         print(f"{back_num}. Back")
+        if 'dedicated_isp' not in allowed:
+            print('\nDedicated ISP: no bandwidth allocated. Request management for more.')
         choice = input(f'Select [1-{back_num}]: ').strip()
         if choice.isdigit():
             n = int(choice)
@@ -136,7 +138,7 @@ def view_proxies(cfg, ptype):
     for i, p in enumerate(proxies, 1):
         print(f"{i}. {p.get('country_code')} {p.get('city_name')}  {p.get('proxy_address')}:{p.get('port')}  ASN {p.get('asn_number')}")
     if data.get('purchase_required'):
-        print('\nDedicated ISP proxies are available for purchase.')
+        print('\nDedicated ISP has no bandwidth allocated. Request management for more.')
     note = data.get('note')
     if note:
         print(f"\n{note}")

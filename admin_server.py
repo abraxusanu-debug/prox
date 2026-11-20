@@ -71,7 +71,7 @@ def api_proxies():
             'proxy_type': 'Dedicated ISP',
             'proxies': [],
             'purchase_required': True,
-            'note': 'Dedicated ISP proxies are available for purchase. No dedicated proxies are assigned to this account.'
+            'note': 'Dedicated ISP has no bandwidth allocated on this account. Request management for more.'
         })
     # Static residential - real Webshare proxies
     try:
