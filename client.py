@@ -100,20 +100,30 @@ def main_menu(cfg):
             print('Invalid choice')
 
 def proxies_menu(cfg):
+    data, err = api_get(cfg, '/api/me')
+    allowed = ['static_residential']
+    if not err and data.get('proxy_types'):
+        allowed = data.get('proxy_types')
+    labels = {
+        'static_residential': 'Static Residential',
+        'dedicated_isp': 'Dedicated ISP'
+    }
     while True:
         header('Proxies')
-        print('1. Static Residential')
-        print('2. Dedicated ISP')
-        print('3. Back')
-        choice = input('Select [1-3]: ').strip()
-        if choice == '1':
-            view_proxies(cfg, 'static_residential')
-        elif choice == '2':
-            view_proxies(cfg, 'dedicated_isp')
-        elif choice == '3':
-            return
-        else:
-            print('Invalid choice')
+        options = []
+        for i, ptype in enumerate(allowed, 1):
+            print(f"{i}. {labels.get(ptype, ptype)}")
+            options.append(ptype)
+        back_num = len(options) + 1
+        print(f"{back_num}. Back")
+        choice = input(f'Select [1-{back_num}]: ').strip()
+        if choice.isdigit():
+            n = int(choice)
+            if 1 <= n <= len(options):
+                view_proxies(cfg, options[n-1])
+            elif n == back_num:
+                return
+        print('Invalid choice')
 
 def view_proxies(cfg, ptype):
     data, err = api_get(cfg, '/api/proxies', {'type': ptype})
@@ -149,7 +159,7 @@ def view_proxies(cfg, ptype):
                 except Exception as ce:
                     print(f'\nClipboard copy failed: {ce}')
                     print('Copy the details above manually.')
-                test = input('\nTest this proxy against a neutral site? [y/N]: ').strip().lower()
+                test = input('\nTest this proxy? [y/N]: ').strip().lower()
                 if test == 'y':
                     print('Testing proxy...')
                     res, terr = api_post(cfg, '/api/test-proxy', p)

@@ -47,6 +47,17 @@ def ws_delete(cfg, path):
 def health():
     return jsonify({'status': 'ok'})
 
+@app.route('/api/me')
+def api_me():
+    token = request.args.get('token')
+    user = get_user_by_token(token)
+    if not user:
+        abort(401, description='Invalid token')
+    return jsonify({
+        'label': user.get('label'),
+        'proxy_types': user.get('proxy_types', ['static_residential'])
+    })
+
 @app.route('/api/proxies')
 def api_proxies():
     token = request.args.get('token')
@@ -56,13 +67,12 @@ def api_proxies():
         abort(401, description='Invalid token')
     cfg = load_config()
     if ptype == 'dedicated_isp':
-        # Dedicated ISP option - shown as purchaseable; return sample dedicated proxies
-        dedicated = [
-            {'id':'isp-1','proxy_address':'198.51.100.21','port':3128,'username':'isp_user','password':'isp_pass','country_code':'US','city_name':'Los Angeles','proxy_type_label':'Dedicated ISP','asn_number':'7922','valid':True},
-            {'id':'isp-2','proxy_address':'198.51.100.22','port':3128,'username':'isp_user','password':'isp_pass','country_code':'GB','city_name':'London','proxy_type_label':'Dedicated ISP','asn_number':'2856','valid':True},
-            {'id':'isp-3','proxy_address':'198.51.100.23','port':3128,'username':'isp_user','password':'isp_pass','country_code':'DE','city_name':'Frankfurt','proxy_type_label':'Dedicated ISP','asn_number':'3320','valid':True},
-        ]
-        return jsonify({'proxy_type': 'Dedicated ISP', 'proxies': dedicated, 'purchase_required': True, 'note': 'More locations are loading as your account sets up.'})
+        return jsonify({
+            'proxy_type': 'Dedicated ISP',
+            'proxies': [],
+            'purchase_required': True,
+            'note': 'Dedicated ISP proxies are available for purchase. No dedicated proxies are assigned to this account.'
+        })
     # Static residential - real Webshare proxies
     try:
         data = ws_get(cfg, '/proxy/list/', {'mode': 'direct', 'page_size': 100})
@@ -175,7 +185,10 @@ def api_test_proxy():
         external_ip = r.json().get('ip')
         return jsonify({'online': True, 'latency_ms': elapsed, 'external_ip': external_ip})
     except Exception as e:
-        return jsonify({'online': False, 'error': str(e)})
+        msg = str(e)
+        if '402' in msg or 'Payment Required' in msg:
+            msg = 'Proxy rejected the connection with 402 Payment Required. This proxy is not active on the current plan or requires a paid upgrade.'
+        return jsonify({'online': False, 'error': msg})
 
 @app.route('/api/usage')
 def api_usage():
