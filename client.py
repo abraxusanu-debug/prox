@@ -122,7 +122,7 @@ def view_proxies(cfg, ptype):
         input('Press Enter to go back')
         return
     proxies = data.get('proxies', [])
-    print(header(f"{data.get('proxy_type', ptype)}"))
+    header(f"{data.get('proxy_type', ptype)}")
     for i, p in enumerate(proxies, 1):
         print(f"{i}. {p.get('country_code')} {p.get('city_name')}  {p.get('proxy_address')}:{p.get('port')}  ASN {p.get('asn_number')}")
     if data.get('purchase_required'):
