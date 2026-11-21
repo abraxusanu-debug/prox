@@ -20,7 +20,7 @@ def save_client_cfg(cfg):
 
 def prompt_setup():
     print('First time setup - Admin server connection')
-    server = input('Admin server URL e.g. http://65.98.5.206:5000 : ').strip()
+    server = input('Admin server URL e.g. http://65.98.5.206 : ').strip()
     token = input('User token : ').strip()
     cfg = {'server_url': server.rstrip('/'), 'token': token}
     save_client_cfg(cfg)
