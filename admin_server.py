@@ -45,6 +45,13 @@ def ws_get_all_keys(cfg, path, params=None):
             continue
     return {'results': all_results}
 
+def ws_get(cfg, path, params=None):
+    """Fetch from first API key (for stats, config, etc.)"""
+    api_keys = cfg.get('webshare_api_keys', [cfg.get('webshare_api_key')])
+    if not api_keys:
+        return {}
+    return ws_get_with_key(api_keys[0], path, params)
+
 def ws_patch(cfg, path, data):
     # Use first key for writes
     api_key = cfg.get('webshare_api_keys', [cfg.get('webshare_api_key')])[0]
