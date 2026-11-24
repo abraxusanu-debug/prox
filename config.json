@@ -1,5 +1,8 @@
 {
-  "webshare_api_key": "46pby4zqmd1o1ujuuauz7pndhc6f8330ykgvx4t0",
+  "webshare_api_keys": [
+    "46pby4zqmd1o1ujuuauz7pndhc6f8330ykgvx4t0",
+    "jktavqlhxvypn6zsemw80kqpt63l7jrz7757yxec"
+  ],
   "users": {
     "demo": {
       "token": "demo-token-123",
@@ -30,7 +33,8 @@
       "request_factor": 15.0,
       "proxy_types": [
         "static_residential"
-      ]
+      ],
+      "bandwidth_offset_gb": 1.17
     }
   }
 }

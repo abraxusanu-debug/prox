@@ -5,6 +5,24 @@ import pyperclip
 
 CONFIG_PATH = os.path.join(os.path.expanduser('~'), '.prox_client_config.json')
 
+# ANSI color codes
+GREEN = '\033[92m'
+ORANGE = '\033[33m'
+RED = '\033[91m'
+RESET = '\033[0m'
+BOLD = '\033[1m'
+
+def colorize_latency(latency_ms, status):
+    """Return color-coded latency string"""
+    if latency_ms is None:
+        return f"{RED}unreachable{RESET}"
+    if status == 'good':
+        return f"{GREEN}{latency_ms} ms{RESET}"
+    elif status == 'bad':
+        return f"{ORANGE}{latency_ms} ms{RESET}"
+    else:
+        return f"{RED}{latency_ms} ms{RESET}"
+
 def load_client_cfg():
     if os.path.exists(CONFIG_PATH):
         try:
@@ -128,7 +146,8 @@ def proxies_menu(cfg):
         print('Invalid choice')
 
 def view_proxies(cfg, ptype):
-    data, err = api_get(cfg, '/api/proxies', {'type': ptype})
+    # First check if we have cached latency data
+    data, err = api_get(cfg, '/api/proxies', {'type': ptype, 'test_latency': 'false'})
     if err:
         print('Error:', err)
         input('Press Enter to go back')
@@ -136,15 +155,40 @@ def view_proxies(cfg, ptype):
     proxies = data.get('proxies', [])
     header(f"{data.get('proxy_type', ptype)}")
     for i, p in enumerate(proxies, 1):
-        print(f"{i}. {p.get('country_code')} {p.get('city_name')}  {p.get('proxy_address')}:{p.get('port')}  ASN {p.get('asn_number')}")
+        latency_str = ""
+        if p.get('latency_ms') is not None:
+            latency_str = f"  Latency: {colorize_latency(p.get('latency_ms'), p.get('latency_status', 'unreachable'))}"
+        elif p.get('latency_status'):
+            latency_str = f"  Latency: {colorize_latency(None, p.get('latency_status'))}"
+        print(f"{i}. {p.get('country_code')} {p.get('city_name')}  {p.get('proxy_address')}:{p.get('port')}  ASN {p.get('asn_number')}{latency_str}")
     if data.get('purchase_required'):
         print('\nDedicated ISP has no bandwidth allocated. Request management for more.')
     note = data.get('note')
     if note:
         print(f"\n{note}")
     if proxies:
-        c = input('\nEnter number to view/copy proxy credentials, or Enter to go back: ').strip()
-        if c:
+        print('\nOptions:')
+        print('  [number]  View/copy proxy credentials')
+        print('  [t]       Test latency for all proxies')
+        print('  [Enter]   Back')
+        c = input('Select: ').strip()
+        if c.lower() == 't':
+            print('\nTesting latency for all proxies...')
+            test_all_proxies_latency(cfg, proxies)
+            # Re-fetch with latency
+            data2, err2 = api_get(cfg, '/api/proxies', {'type': ptype, 'test_latency': 'true'})
+            if not err2:
+                proxies = data2.get('proxies', [])
+                header(f"{data2.get('proxy_type', ptype)} (with latency)")
+                for i, p in enumerate(proxies, 1):
+                    latency_str = ""
+                    if p.get('latency_ms') is not None:
+                        latency_str = f"  Latency: {colorize_latency(p.get('latency_ms'), p.get('latency_status', 'unreachable'))}"
+                    elif p.get('latency_status'):
+                        latency_str = f"  Latency: {colorize_latency(None, p.get('latency_status'))}"
+                    print(f"{i}. {p.get('country_code')} {p.get('city_name')}  {p.get('proxy_address')}:{p.get('port')}  ASN {p.get('asn_number')}{latency_str}")
+            c = input('\nEnter number to view/copy proxy credentials, or Enter to go back: ').strip()
+        if c and c.lower() != 't':
             try:
                 idx = int(c) - 1
                 p = proxies[idx]
@@ -154,6 +198,13 @@ def view_proxies(cfg, ptype):
                 print(f"  Username: {p.get('username')}")
                 print(f"  Password: {p.get('password')}")
                 print(f"  Format:   {p.get('username')}:{p.get('password')}@{p.get('proxy_address')}:{p.get('port')}")
+                latency_str = ""
+                if p.get('latency_ms') is not None:
+                    latency_str = f"  Latency: {colorize_latency(p.get('latency_ms'), p.get('latency_status', 'unreachable'))}"
+                elif p.get('latency_status'):
+                    latency_str = f"  Latency: {colorize_latency(None, p.get('latency_status'))}"
+                if latency_str:
+                    print(latency_str)
                 text = f"{p.get('username')}:{p.get('password')}@{p.get('proxy_address')}:{p.get('port')}"
                 try:
                     pyperclip.copy(text)
@@ -168,12 +219,24 @@ def view_proxies(cfg, ptype):
                     if terr:
                         print('Test error:', terr)
                     elif res.get('online'):
-                        print(f"Proxy is online. Latency: {res.get('latency_ms')} ms. External IP: {res.get('external_ip')}")
+                        print(f"Proxy is online. Latency: {colorize_latency(res.get('latency_ms'), res.get('status', 'unreachable'))}. External IP: {res.get('external_ip')}")
                     else:
                         print(f"Proxy test failed: {res.get('error')}")
             except Exception as e:
                 print('Error:', e)
     input('Press Enter to go back')
+
+def test_all_proxies_latency(cfg, proxies):
+    """Test latency for all proxies via batch endpoint"""
+    proxy_ids = [p.get('id') for p in proxies if p.get('id')]
+    if not proxy_ids:
+        print('No proxies to test')
+        return
+    res, err = api_post(cfg, '/api/proxy-latency', {'proxy_ids': proxy_ids})
+    if err:
+        print(f'Latency test error: {err}')
+    else:
+        print(f'Tested {len(res.get("results", {}))} proxies')
 
 def usage_page(cfg):
     data, err = api_get(cfg, '/api/usage')
