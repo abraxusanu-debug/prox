@@ -132,6 +132,8 @@ def api_proxies():
     token = request.args.get('token')
     ptype = request.args.get('type', 'static_residential')
     test_latency = request.args.get('test_latency', 'false').lower() == 'true'
+    page = int(request.args.get('page', 1))
+    per_page = int(request.args.get('per_page', 20))
     user = get_user_by_token(token)
     if not user:
         abort(401, description='Invalid token')
@@ -141,14 +143,45 @@ def api_proxies():
             'proxy_type': 'Dedicated ISP',
             'proxies': [],
             'purchase_required': True,
-            'note': 'Dedicated ISP has no bandwidth allocated on this account. Request management for more.'
+            'note': 'Dedicated ISP has no bandwidth allocated on this account. Request management for more.',
+            'page': page,
+            'per_page': per_page,
+            'total': 0,
+            'total_pages': 0
         })
     # Static residential - real Webshare proxies from all keys
     try:
-        data = ws_get_all_keys(cfg, '/proxy/list/', {'mode': 'direct', 'page_size': 100})
-        proxies = data.get('results', [])[:20]
+        # Fetch all proxies from both keys
+        all_proxies = []
+        for key in cfg.get('webshare_api_keys', [cfg.get('webshare_api_key')]):
+            try:
+                page_num = 1
+                while True:
+                    data = ws_get_with_key(key, '/proxy/list/', {'mode': 'direct', 'page_size': 100, 'page': page_num})
+                    results = data.get('results', [])
+                    if not results:
+                        break
+                    all_proxies.extend(results)
+                    if not data.get('next'):
+                        break
+                    page_num += 1
+            except Exception as e:
+                print(f"Error fetching from key {key[:10]}...: {e}")
+                continue
+        
+        # Filter only active proxies
+        active_proxies = [p for p in all_proxies if p.get('valid')]
+        
+        # Pagination
+        total = len(active_proxies)
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        page = max(1, min(page, total_pages))
+        start = (page - 1) * per_page
+        end = start + per_page
+        page_proxies = active_proxies[start:end]
+        
         enriched = []
-        for p in proxies:
+        for p in page_proxies:
             enriched.append({
                 'id': p.get('id'),
                 'proxy_address': p.get('proxy_address'),
@@ -169,13 +202,23 @@ def api_proxies():
                 if lr:
                     p['latency_ms'] = lr['latency_ms']
                     p['latency_status'] = lr['status']
-        return jsonify({'proxy_type': 'Static Residential', 'proxies': enriched, 'purchase_required': False, 'note': 'More locations are loading as your account sets up.'})
+        
+        return jsonify({
+            'proxy_type': 'Static Residential', 
+            'proxies': enriched, 
+            'purchase_required': False, 
+            'note': 'More locations are loading as your account sets up.',
+            'page': page,
+            'per_page': per_page,
+            'total': total,
+            'total_pages': total_pages
+        })
     except Exception as e:
         mock = [
             {'id':'m1','proxy_address':'1.2.3.4','port':8080,'username':'u1','password':'p1','country_code':'US','city_name':'New York','proxy_type_label':'Static Residential','asn_number':'20738','valid':True},
             {'id':'m2','proxy_address':'5.6.7.8','port':8080,'username':'u2','password':'p2','country_code':'DE','city_name':'Berlin','proxy_type_label':'Static Residential','asn_number':'3320','valid':True},
         ]
-        return jsonify({'proxy_type': 'Static Residential', 'proxies': mock, 'fallback': True, 'error': str(e)})
+        return jsonify({'proxy_type': 'Static Residential', 'proxies': mock, 'fallback': True, 'error': str(e), 'page': 1, 'per_page': per_page, 'total': 2, 'total_pages': 1})
 
 @app.route('/api/proxy-auth', methods=['GET', 'POST'])
 def api_proxy_auth():
